@@ -41,9 +41,8 @@ def main():
     compress_and_upload_files(args.directory, max_zip_bytes,
                               args.folder_id, args.delete_after_sending, args.exclude)
 
+
 # Authenticate with Google Drive API and return the credentials object
-
-
 def get_credentials():
     creds = None
     if os.path.exists('token.json'):
@@ -59,9 +58,8 @@ def get_credentials():
             token.write(creds.to_json())
     return creds
 
+
 # Check if a file should be excluded based on its name and the provided patterns
-
-
 def should_exclude(file, patterns):
     if patterns is None:
         return False
@@ -70,10 +68,9 @@ def should_exclude(file, patterns):
             return True
     return False
 
+
 # Compress files in the specified directory, upload compressed files to Google Drive,
 # and optionally delete local files after uploading
-
-
 def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_sending, exclude_patterns):
     total_size = 0
     zip_file = None
@@ -113,9 +110,8 @@ def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_
         upload_and_cleanup(zip_file.filename, folder_id,
                            files_in_zip, delete_after_sending)
 
+
 # Upload the compressed file to Google Drive and clean up local files after uploading
-
-
 def upload_and_cleanup(zip_path, folder_id, files_in_zip, delete_after_sending):
     file_id = upload_to_drive(zip_path, folder_id)
     if file_id is not None:
@@ -123,9 +119,8 @@ def upload_and_cleanup(zip_path, folder_id, files_in_zip, delete_after_sending):
             delete_local_files(files_in_zip)
             delete_local_file(zip_path)
 
+
 # Upload a file to Google Drive and return its file ID
-
-
 def upload_to_drive(file_path, folder_id):
     file_metadata = {
         "name": os.path.basename(file_path),
@@ -146,17 +141,15 @@ def upload_to_drive(file_path, folder_id):
 
     return file.get("id")
 
+
 # Delete a list of local files
-
-
 def delete_local_files(file_paths):
     for file_path in file_paths:
         os.remove(file_path)
         print(f"Deleted {file_path}")
 
+
 # Delete a local file
-
-
 def delete_local_file(file_path):
     os.remove(file_path)
     print(f"Deleted {file_path}")
