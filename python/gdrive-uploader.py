@@ -10,12 +10,12 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-# If modifying these scopes, delete the file token.json.
+# Define the Google Drive API scope for accessing the drive files
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 
 def main():
-    # Parse command line arguments
+    # Set up argument parser and define command line arguments
     parser = argparse.ArgumentParser(
         description="Compress and upload files to Google Drive")
     parser.add_argument(
@@ -33,13 +33,15 @@ def main():
     # Convert max-zip-gb to bytes
     max_zip_bytes = args.max_zip_gb * (1024 ** 3)
 
+    # Authenticate with Google Drive API
     creds = get_credentials()
     service = build('drive', 'v3', credentials=creds)
 
+    # Compress and upload files to Google Drive
     compress_and_upload_files(args.directory, max_zip_bytes,
                               args.folder_id, args.delete_after_sending, args.exclude)
 
-# Authenticate with Google Drive API
+# Authenticate with Google Drive API and return the credentials object
 
 
 def get_credentials():
@@ -57,6 +59,8 @@ def get_credentials():
             token.write(creds.to_json())
     return creds
 
+# Check if a file should be excluded based on its name and the provided patterns
+
 
 def should_exclude(file, patterns):
     if patterns is None:
@@ -66,12 +70,16 @@ def should_exclude(file, patterns):
             return True
     return False
 
+# Compress files in the specified directory, upload compressed files to Google Drive,
+# and optionally delete local files after uploading
+
 
 def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_sending, exclude_patterns):
     total_size = 0
     zip_file = None
     files_in_zip = []
 
+    # Iterate through all files in the directory
     for root, _, files in os.walk(directory):
         for file in files:
             if should_exclude(file, exclude_patterns):
@@ -80,6 +88,7 @@ def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_
             file_path = os.path.join(root, file)
             file_size = os.path.getsize(file_path)
 
+            # If adding the current file exceeds the maximum zip size, start a new zip
             if total_size + file_size > max_zip_bytes:
                 if zip_file is not None:
                     zip_file.close()
@@ -92,6 +101,7 @@ def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_
                 zip_file = ZipFile(zip_name, "w", ZIP_DEFLATED)
                 total_size = 0
 
+            # Add the current file to the open zip archive
             if zip_file is not None:
                 zip_file.write(file_path, os.path.relpath(
                     file_path, directory))
@@ -103,6 +113,8 @@ def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_
         upload_and_cleanup(zip_file.filename, folder_id,
                            files_in_zip, delete_after_sending)
 
+# Upload the compressed file to Google Drive and clean up local files after uploading
+
 
 def upload_and_cleanup(zip_path, folder_id, files_in_zip, delete_after_sending):
     file_id = upload_to_drive(zip_path, folder_id)
@@ -110,6 +122,8 @@ def upload_and_cleanup(zip_path, folder_id, files_in_zip, delete_after_sending):
         if delete_after_sending:
             delete_local_files(files_in_zip)
             delete_local_file(zip_path)
+
+# Upload a file to Google Drive and return its file ID
 
 
 def upload_to_drive(file_path, folder_id):
@@ -132,11 +146,15 @@ def upload_to_drive(file_path, folder_id):
 
     return file.get("id")
 
+# Delete a list of local files
+
 
 def delete_local_files(file_paths):
     for file_path in file_paths:
         os.remove(file_path)
         print(f"Deleted {file_path}")
+
+# Delete a local file
 
 
 def delete_local_file(file_path):
@@ -144,5 +162,6 @@ def delete_local_file(file_path):
     print(f"Deleted {file_path}")
 
 
+# Call the main function if the script is being run as the main module
 if __name__ == '__main__':
     main()
