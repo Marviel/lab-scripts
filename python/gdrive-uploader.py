@@ -9,40 +9,23 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
+from dataclasses import dataclass
+
+
+@dataclass
+class GDriveUploaderContext:
+    service: object
+
 
 # Define the Google Drive API scope for accessing the drive files
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-
-def main():
-    # Set up argument parser and define command line arguments
-    parser = argparse.ArgumentParser(
-        description="Compress and upload files to Google Drive")
-    parser.add_argument(
-        "directory", help="The target directory containing the files")
-    parser.add_argument(
-        "folder_id", help="Google Drive folder ID for uploading files")
-    parser.add_argument("--exclude", nargs="*",
-                        help="File patterns to exclude from upload (e.g. *.log)")
-    parser.add_argument("--max-zip-gb", type=float, default=3.5,
-                        help="Maximum zip file size in GiB (default: 3.5)")
-    parser.add_argument("-d", "--delete-after-sending",
-                        action="store_true", help="Delete local files after uploading")
-    args = parser.parse_args()
-
-    # Convert max-zip-gb to bytes
-    max_zip_bytes = args.max_zip_gb * (1024 ** 3)
-
-    # Authenticate with Google Drive API
-    creds = get_credentials()
-    service = build('drive', 'v3', credentials=creds)
-
-    # Compress and upload files to Google Drive
-    compress_and_upload_files(args.directory, max_zip_bytes,
-                              args.folder_id, args.delete_after_sending, args.exclude)
+CTX = GDriveUploaderContext(None)
 
 
 # Authenticate with Google Drive API and return the credentials object
+
+
 def get_credentials():
     creds = None
     if os.path.exists('token.json'):
@@ -72,13 +55,20 @@ def should_exclude(file, patterns):
 # Compress files in the specified directory, upload compressed files to Google Drive,
 # and optionally delete local files after uploading
 def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_sending, exclude_patterns):
+    zip_name = os.path.join(directory, f"gdrive_uploader_temp.zip")
+
+    def recreate_tmp_zip():
+        return ZipFile(zip_name, "w", ZIP_DEFLATED)
+
     total_size = 0
-    zip_file = None
+    zip_file = recreate_tmp_zip()
     files_in_zip = []
 
     # Iterate through all files in the directory
     for root, _, files in os.walk(directory):
+        print(f"Compressing files in {root}...")
         for file in files:
+            print(f"Adding {file}...")
             if should_exclude(file, exclude_patterns):
                 continue
 
@@ -87,15 +77,14 @@ def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_
 
             # If adding the current file exceeds the maximum zip size, start a new zip
             if total_size + file_size > max_zip_bytes:
+                print("Zip file size limit reached, starting new zip file...")
                 if zip_file is not None:
                     zip_file.close()
                     upload_and_cleanup(
                         zip_file.filename, folder_id, files_in_zip, delete_after_sending)
                     files_in_zip = []
 
-                zip_name = os.path.join(
-                    directory, f"{os.path.basename(root)}_temp.zip")
-                zip_file = ZipFile(zip_name, "w", ZIP_DEFLATED)
+                zip_file = recreate_tmp_zip()
                 total_size = 0
 
             # Add the current file to the open zip archive
@@ -132,8 +121,8 @@ def upload_to_drive(file_path, folder_id):
         file_path, mimetype="application/zip", resumable=True)
 
     try:
-        file = service.files().create(body=file_metadata,
-                                      media_body=media, fields="id").execute()
+        file = CTX.service.files().create(body=file_metadata,
+                                          media_body=media, fields="id").execute()
         print(f"Uploaded {file.get('id')}")
     except HttpError as error:
         print(f"An error occurred: {error}")
@@ -153,6 +142,37 @@ def delete_local_files(file_paths):
 def delete_local_file(file_path):
     os.remove(file_path)
     print(f"Deleted {file_path}")
+
+
+def main():
+    # Set up argument parser and define command line arguments
+    parser = argparse.ArgumentParser(
+        description="Compress and upload files to Google Drive")
+    parser.add_argument(
+        "directory", help="The target directory containing the files")
+    parser.add_argument(
+        "folder_id", help="Google Drive folder ID for uploading files")
+    parser.add_argument("--exclude", nargs="*",
+                        help="File patterns to exclude from upload (e.g. *.log)")
+    parser.add_argument("--max-zip-gb", type=float, default=3.5,
+                        help="Maximum zip file size in GiB (default: 3.5)")
+    parser.add_argument("-d", "--delete-after-sending",
+                        action="store_true", help="Delete local files after uploading")
+    args = parser.parse_args()
+
+    # Convert max-zip-gb to bytes
+    max_zip_bytes = args.max_zip_gb * (1024 ** 3)
+
+    # Authenticate with Google Drive API
+    creds = get_credentials()
+    CTX.service = build('drive', 'v3', credentials=creds)
+
+    print(
+        f"Uploading files from {args.directory} to Google Drive folder {args.folder_id}...")
+
+    # Compress and upload files to Google Drive
+    compress_and_upload_files(args.directory, max_zip_bytes,
+                              args.folder_id, args.delete_after_sending, args.exclude)
 
 
 # Call the main function if the script is being run as the main module
