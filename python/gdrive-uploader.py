@@ -55,36 +55,42 @@ def should_exclude(file, patterns):
 # Compress files in the specified directory, upload compressed files to Google Drive,
 # and optionally delete local files after uploading
 def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_sending, exclude_patterns):
-    zip_name = os.path.join(directory, f"gdrive_uploader_temp.zip")
 
-    def recreate_tmp_zip():
-        return ZipFile(zip_name, "w", ZIP_DEFLATED)
+    # TODO: things didn't seem to be appearing in google drive... need to investigate.
+    def recreate_tmp_zip(fname: str):
+        zip_path = os.path.join(directory, fname)
+        return ZipFile(zip_path, "w", ZIP_DEFLATED)
 
+    current_zip_idx = 0
     total_size = 0
-    zip_file = recreate_tmp_zip()
+    zip_file = recreate_tmp_zip(f"gdrive_uploader_temp_{current_zip_idx}.zip")
     files_in_zip = []
 
     # Iterate through all files in the directory
-    for root, _, files in os.walk(directory):
+    for (i, (root, _, files)) in enumerate(os.walk(directory)):
         print(f"Compressing files in {root}...")
         for file in files:
-            print(f"Adding {file}...")
             if should_exclude(file, exclude_patterns):
+                print(f"Skipping (Exclude Matched) {file}...")
                 continue
 
             file_path = os.path.join(root, file)
             file_size = os.path.getsize(file_path)
+            print(f"Adding {file} ({file_size} bytes)...")
 
             # If adding the current file exceeds the maximum zip size, start a new zip
             if total_size + file_size > max_zip_bytes:
-                print("Zip file size limit reached, starting new zip file...")
                 if zip_file is not None:
+                    print(
+                        f"Zip-{current_zip_idx} file size limit reached, starting new zip file...")
                     zip_file.close()
                     upload_and_cleanup(
                         zip_file.filename, folder_id, files_in_zip, delete_after_sending)
                     files_in_zip = []
 
-                zip_file = recreate_tmp_zip()
+                zip_file = recreate_tmp_zip(
+                    f"gdrive_uploader_temp_{current_zip_idx}.zip")
+                current_zip_idx += 1
                 total_size = 0
 
             # Add the current file to the open zip archive
@@ -93,6 +99,9 @@ def compress_and_upload_files(directory, max_zip_bytes, folder_id, delete_after_
                     file_path, directory))
                 files_in_zip.append(file_path)
                 total_size += file_size
+
+            print(
+                f"Zip-{current_zip_idx} has {max_zip_bytes - total_size} bytes left")
 
     if zip_file is not None:
         zip_file.close()
